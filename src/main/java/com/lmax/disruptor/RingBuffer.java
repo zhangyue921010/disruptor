@@ -29,13 +29,16 @@ abstract class RingBufferPad
 abstract class RingBufferFields<E> extends RingBufferPad
 {
     private static final int BUFFER_PAD;
-    private static final long REF_ARRAY_BASE;
+    private static final long REF_ARRAY_BASE;// 数组首元素的内存地址
     private static final int REF_ELEMENT_SHIFT;
     private static final Unsafe UNSAFE = Util.getUnsafe();
 
+    /**
+     * 通过Unsafe类来实现硬件级别的原子操作，直接对内存进行操作
+     */
     static
     {
-        final int scale = UNSAFE.arrayIndexScale(Object[].class);
+        final int scale = UNSAFE.arrayIndexScale(Object[].class);//获取数组中 元素的大小
         if (4 == scale)
         {
             REF_ELEMENT_SHIFT = 2;
@@ -50,6 +53,8 @@ abstract class RingBufferFields<E> extends RingBufferPad
         }
         BUFFER_PAD = 128 / scale;
         // Including the buffer pad in the array base offset
+        // UNSAFE.arrayBaseOffset(Object[].class) 获取数组头元素的内存地址
+        // 左移一位相当于乘2
         REF_ARRAY_BASE = UNSAFE.arrayBaseOffset(Object[].class) + (BUFFER_PAD << REF_ELEMENT_SHIFT);
     }
 
@@ -58,6 +63,11 @@ abstract class RingBufferFields<E> extends RingBufferPad
     protected final int bufferSize;
     protected final Sequencer sequencer;
 
+    /**
+     * RingBuffer对象 初始化做了以下几件事：
+     * 1. RingBuffer 对象持有Sequencer对象
+     * 2. 初始化RingBuffer“事件”：用 eventFactory 来初始化 Object 数组 entries
+     */
     RingBufferFields(
         EventFactory<E> eventFactory,
         Sequencer sequencer)
@@ -88,6 +98,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
     }
 
     @SuppressWarnings("unchecked")
+    // 取余操作实现环形队列
     protected final E elementAt(long sequence)
     {
         return (E) UNSAFE.getObject(entries, REF_ARRAY_BASE + ((sequence & indexMask) << REF_ELEMENT_SHIFT));
@@ -152,6 +163,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
      */
     public static <E> RingBuffer<E> createMultiProducer(EventFactory<E> factory, int bufferSize)
     {
+        //默认等待策略为BlockingWaitStrategy
         return createMultiProducer(factory, bufferSize, new BlockingWaitStrategy());
     }
 
@@ -491,7 +503,10 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     @Override
     public <A> void publishEvent(EventTranslatorOneArg<E, A> translator, A arg0)
     {
+        //从SingleProducerSequencer/MultiProducerSequencer处申请可用来生产的序号
+        // 需要注意的是sequence是一个不断增大的值
         final long sequence = sequencer.next();
+        // 执行生产逻辑 并 发布生产事件
         translateAndPublish(translator, sequence, arg0);
     }
 
@@ -971,6 +986,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     {
         try
         {
+            // 获取生产者游标 对应的element元素 并 执行生产逻辑
             translator.translateTo(get(sequence), sequence, arg0);
         }
         finally

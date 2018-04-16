@@ -32,10 +32,18 @@ public final class BlockingWaitStrategy implements WaitStrategy
     private final Condition processorNotifyCondition = lock.newCondition();
 
     @Override
+    /**
+     * 获得最大可消费需要的原则：
+     * 1. 消费序号不能大于生产者序号 即 消费者不能超过生产者
+     * 2. 消费者序号不能大于上级消费者序号 即 下级消费者只能消费上级消费者消费过的数据
+     */
     public long waitFor(long sequence, Sequence cursorSequence, Sequence dependentSequence, SequenceBarrier barrier)
         throws AlertException, InterruptedException
     {
         long availableSequence;
+        /**
+         * 如果生产者游标序号小于消费起点序号  即 要消费还没有生产的位置 则进入等待 等待生产者生产数据并更新生产者游标
+         */
         if (cursorSequence.get() < sequence)
         {
             lock.lock();
@@ -51,8 +59,10 @@ public final class BlockingWaitStrategy implements WaitStrategy
             {
                 lock.unlock();
             }
-        }
+        }//此时状态： 生产者游标大于消费者起点序号 即 生产者快于消费者
 
+        // 1. 获取上级消费者的消费序号 赋值给availableSequence
+        // 2. 若 消费序号大于上级消费者的消费序号 则需要等待
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
             barrier.checkAlert();

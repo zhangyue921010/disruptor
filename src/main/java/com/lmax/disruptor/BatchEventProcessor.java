@@ -30,9 +30,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class BatchEventProcessor<T>
     implements EventProcessor
 {
-    private static final int IDLE = 0;
-    private static final int HALTED = IDLE + 1;
-    private static final int RUNNING = HALTED + 1;
+    //BatchEventProcessor线程运行状态标志位：
+    private static final int IDLE = 0;  // 初始状态 0
+    private static final int HALTED = IDLE + 1; // 停止状态 1
+    private static final int RUNNING = HALTED + 1;// 运行状态 2
 
     private final AtomicInteger running = new AtomicInteger(IDLE);
     private ExceptionHandler<? super T> exceptionHandler = new FatalExceptionHandler();
@@ -111,6 +112,12 @@ public final class BatchEventProcessor<T>
      * @throws IllegalStateException if this object instance is already running in a thread
      */
     @Override
+    /**
+     * run方法的逻辑：
+     *1. 利用CAS 将标志位置为RUNNING
+     *2. 再一次判断标志位 如果为RUNNING 则执行消费逻辑
+     *3. 执行完成后 关闭当前线程 并重置线程标志位
+     */
     public void run()
     {
         if (running.compareAndSet(IDLE, RUNNING))
@@ -150,18 +157,19 @@ public final class BatchEventProcessor<T>
     private void processEvents()
     {
         T event = null;
-        long nextSequence = sequence.get() + 1L;
+        long nextSequence = sequence.get() + 1L;// 起点 序号
 
+        // 消费进程长期存活
         while (true)
         {
             try
             {
-                final long availableSequence = sequenceBarrier.waitFor(nextSequence);
+                final long availableSequence = sequenceBarrier.waitFor(nextSequence);// 给定起点序号 获取可以消费的最大序列号
                 if (batchStartAware != null)
                 {
                     batchStartAware.onBatchStart(availableSequence - nextSequence + 1);
                 }
-
+                // 消费[nextSequence,availableSequence]位置的数据---->BatchEventProcessor
                 while (nextSequence <= availableSequence)
                 {
                     event = dataProvider.get(nextSequence);
@@ -169,7 +177,7 @@ public final class BatchEventProcessor<T>
                     nextSequence++;
                 }
 
-                sequence.set(availableSequence);
+                sequence.set(availableSequence);// 更新起点序号
             }
             catch (final TimeoutException e)
             {

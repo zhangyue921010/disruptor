@@ -113,7 +113,7 @@ public final class WorkProcessor<T>
 
         notifyStart();
 
-        boolean processedSequence = true;
+        boolean processedSequence = true;// 当前序号对应的位置是否消费过的标志位 true为消费过 false为未消费
         long cachedAvailableSequence = Long.MIN_VALUE;
         long nextSequence = sequence.get();
         T event = null;
@@ -126,6 +126,7 @@ public final class WorkProcessor<T>
                 // typically, this will be true
                 // this prevents the sequence getting too far forward if an exception
                 // is thrown from the WorkHandler
+                //若 processedSequence为true 即 当前位置消费完成 则申请下一个消费序号
                 if (processedSequence)
                 {
                     processedSequence = false;
@@ -137,6 +138,8 @@ public final class WorkProcessor<T>
                     while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence));
                 }
 
+                // 若 缓存的可用来消费的序号大于待消费序号 则执行消费逻辑 并置processedSequence为true
+                // 否则 更新 缓存最大可消费序号
                 if (cachedAvailableSequence >= nextSequence)
                 {
                     event = ringBuffer.get(nextSequence);
@@ -145,6 +148,7 @@ public final class WorkProcessor<T>
                 }
                 else
                 {
+                    // 给定 下一个消费点序号 获取可消费的最大序号 并进行缓存
                     cachedAvailableSequence = sequenceBarrier.waitFor(nextSequence);
                 }
             }

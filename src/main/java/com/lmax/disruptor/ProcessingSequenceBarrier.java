@@ -48,7 +48,7 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
     }
 
     @Override
-    public long waitFor(final long sequence)
+    public long waitFor(final long sequence)// sequence 为起点序号
         throws AlertException, InterruptedException, TimeoutException
     {
         checkAlert();
@@ -60,6 +60,7 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
             return availableSequence;
         }
 
+        //
         return sequencer.getHighestPublishedSequence(sequence, availableSequence);
     }
 

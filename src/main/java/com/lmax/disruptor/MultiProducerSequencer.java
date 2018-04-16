@@ -40,9 +40,9 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
     // availableBuffer tracks the state of each ringbuffer slot
     // see below for more details on the approach
-    private final int[] availableBuffer;
-    private final int indexMask;
-    private final int indexShift;
+    private final int[] availableBuffer;// RingBuffer的参考数组
+    private final int indexMask;    // bufferSize - 1
+    private final int indexShift;   // bufferSize的二进制值
 
     /**
      * Construct a Sequencer with the selected wait strategy and buffer size.
@@ -55,8 +55,8 @@ public final class MultiProducerSequencer extends AbstractSequencer
         super(bufferSize, waitStrategy);
         availableBuffer = new int[bufferSize];
         indexMask = bufferSize - 1;
-        indexShift = Util.log2(bufferSize);
-        initialiseAvailableBuffer();
+        indexShift = Util.log2(bufferSize);// 计算bufferSize的二进制值
+        initialiseAvailableBuffer();//availableBuffer 数组的初始值为-1
     }
 
     /**
@@ -119,9 +119,10 @@ public final class MultiProducerSequencer extends AbstractSequencer
         long current;
         long next;
 
+        //do--while
         do
         {
-            current = cursor.get();
+            current = cursor.get();//获取当前生产者的游标
             next = current + n;
 
             long wrapPoint = next - bufferSize;
@@ -139,7 +140,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
                 gatingSequenceCache.set(gatingSequence);
             }
-            else if (cursor.compareAndSet(current, next))
+            else if (cursor.compareAndSet(current, next))// 如果当前申请的可生产序号符合条件则更新生产者游标并占用 否则进入循环 继续申请下一个可生产序号
             {
                 break;
             }
@@ -210,6 +211,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
     /**
      * @see Sequencer#publish(long)
+     * MultiProducerSequencer 的publish逻辑： 置位 availableBuffer相关元素
      */
     @Override
     public void publish(final long sequence)
@@ -273,6 +275,13 @@ public final class MultiProducerSequencer extends AbstractSequencer
         return UNSAFE.getIntVolatile(availableBuffer, bufferAddress) == flag;
     }
 
+    /**
+     *
+     * @param lowerBound 起始值
+     * @param availableSequence The sequence to scan to.
+     * @return
+     * 查询availableBuffer 从起始值开始 直到不可用为止
+     */
     @Override
     public long getHighestPublishedSequence(long lowerBound, long availableSequence)
     {

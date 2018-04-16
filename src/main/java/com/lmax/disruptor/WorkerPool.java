@@ -55,7 +55,8 @@ public final class WorkerPool<T>
         this.ringBuffer = ringBuffer;
         final int numWorkers = workHandlers.length;
         workProcessors = new WorkProcessor[numWorkers];
-
+        // 在workPool中 为每一个workHandler 构造一个 WorkProcessor'
+        // 需要注意的是 所有WorkProcessor对象共用一个workSequence 即共用同一个消费者游标
         for (int i = 0; i < numWorkers; i++)
         {
             workProcessors[i] = new WorkProcessor<>(

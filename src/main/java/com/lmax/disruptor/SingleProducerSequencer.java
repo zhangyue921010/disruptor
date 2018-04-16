@@ -37,7 +37,7 @@ abstract class SingleProducerSequencerFields extends SingleProducerSequencerPad
     }
 
     /**
-     * Set to -1 as sequence starting point
+     * Set to -1 as sequence starting point 初始值为-1
      */
     long nextValue = Sequence.INITIAL_VALUE;
     long cachedValue = Sequence.INITIAL_VALUE;
@@ -121,25 +121,36 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
             throw new IllegalArgumentException("n must be > 0");
         }
 
-        long nextValue = this.nextValue;
+        long nextValue = this.nextValue;//初始值为-1
 
-        long nextSequence = nextValue + n;
-        long wrapPoint = nextSequence - bufferSize;
-        long cachedGatingSequence = this.cachedValue;
+        long nextSequence = nextValue + n;// next()==>next(1)==>nextSequence = nextValue + 1
+        long wrapPoint = nextSequence - bufferSize;// 绕圈点 临界值 小于wrapPoint的点均为被生产者超一圈的点
+        long cachedGatingSequence = this.cachedValue;// 缓存 门控序列值 即 消费者组中最慢的消费者的序号
 
+        /**
+         * 生产则生产数据时 要求：
+         * 1. 生产者要快于消费者
+         * 2. 生产者不能快于最慢消费者一圈
+         */
+        //若 生产者 超过 最慢消费者一圈 或 最慢消费者超过生产者 则等待消费者消费 或 更新最慢消费者序号
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
-            cursor.setVolatile(nextValue);  // StoreLoad fence
+            cursor.setVolatile(nextValue);  // StoreLoad fence   ...ignore
 
             long minSequence;
+            // gatingSequences 消费者序列
+            // 若wrapPoint > gatingSequences 即 生产者超过最慢消费者一圈 则 等待消费者消费 直到消费者超过套圈点
+            // 要求 n <= bufferSize
             while (wrapPoint > (minSequence = Util.getMinimumSequence(gatingSequences, nextValue)))
             {
                 LockSupport.parkNanos(1L); // TODO: Use waitStrategy to spin?
             }
 
+            //更新 最慢消费者序列值
             this.cachedValue = minSequence;
         }
 
+        //更新 生产者内部序列缓存值
         this.nextValue = nextSequence;
 
         return nextSequence;
@@ -199,6 +210,7 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 
     /**
      * @see Sequencer#publish(long)
+     * SingleProducerSequencer的publish逻辑： 置位生产者游标
      */
     @Override
     public void publish(long sequence)

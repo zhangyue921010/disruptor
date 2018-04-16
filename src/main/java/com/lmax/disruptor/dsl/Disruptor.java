@@ -112,8 +112,11 @@ public class Disruptor<T>
      * @param ringBufferSize the size of the ring buffer.
      * @param threadFactory  a {@link ThreadFactory} to create threads to for processors.
      */
+
     public Disruptor(final EventFactory<T> eventFactory, final int ringBufferSize, final ThreadFactory threadFactory)
     {
+        //  ringBuffer + executor
+        //  createMultiProducer方法做了两件事：1、实例化MultiProducerSequencer对象;  2、实例化RingBuffer对象
         this(RingBuffer.createMultiProducer(eventFactory, ringBufferSize), new BasicExecutor(threadFactory));
     }
 
@@ -545,6 +548,16 @@ public class Disruptor<T>
         return false;
     }
 
+    /**
+     *
+     * @param barrierSequences 上级消费者序列数组 若无上级消费者则为Sequence[0]
+     * @param eventHandlers 消费者逻辑
+     * @return EventHandlerGroup 用来在后续中设置消费链
+     * processorSequences 当前消费组的 消费逻辑序列组
+     * barrier 当前消费者组的门控序列 所有batchEventHandler 共用同一个barrier
+     * batchEventProcessor 为每一个EventHandler创建一个BatchEventProcessor对象 该对象实现Runnable接口 真正执行消费逻辑
+     * consumerRepository 收集消费者信息 内部维护一个Collection 用于迭代启动消费者进程
+     */
     EventHandlerGroup<T> createEventProcessors(
         final Sequence[] barrierSequences,
         final EventHandler<? super T>[] eventHandlers)
@@ -569,7 +582,7 @@ public class Disruptor<T>
             consumerRepository.add(batchEventProcessor, eventHandler, barrier);
             processorSequences[i] = batchEventProcessor.getSequence();
         }
-
+        // 更新门控序列 gatingSequences
         updateGatingSequencesForNextInChain(barrierSequences, processorSequences);
 
         return new EventHandlerGroup<>(this, consumerRepository, processorSequences);
@@ -600,6 +613,15 @@ public class Disruptor<T>
         return handleEventsWith(eventProcessors);
     }
 
+    /**
+     *
+     * @param barrierSequences 上级消费者序列数组 若无上级消费者 则 Sequence[0]
+     * @param workHandlers 消费逻辑
+     * @return
+     * sequenceBarrier 根据上级消费者序列 构造门控序列
+     * workerPool 消费者池 利用WorkProcessor的方式进行消费时 封装了一层WorkPool
+     * consumerRepository 收集消费者信息 内部维护一个Collection 用于迭代启动消费者进程
+     */
     EventHandlerGroup<T> createWorkerPool(
         final Sequence[] barrierSequences, final WorkHandler<? super T>[] workHandlers)
     {
@@ -611,6 +633,7 @@ public class Disruptor<T>
 
         final Sequence[] workerSequences = workerPool.getWorkerSequences();
 
+        //更新门控序列 gatingSequences
         updateGatingSequencesForNextInChain(barrierSequences, workerSequences);
 
         return new EventHandlerGroup<>(this, consumerRepository, workerSequences);
