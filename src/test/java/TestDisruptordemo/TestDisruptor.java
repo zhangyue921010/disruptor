@@ -20,25 +20,24 @@ public class TestDisruptor {
         MyEventHandler2 myEventHandler2 = new MyEventHandler2();
         elementDisruptor.handleEventsWith(myEventHandler1,myEventHandler2);
 
-        //以WorkProcessor的方式消费数据 多个消费进行并行消费同一份数据
-        MyWorkHandler1 myWorkHandler1 = new MyWorkHandler1();
-        MyWorkHandler2 myWorkHandler2 = new MyWorkHandler2();
-        elementDisruptor.handleEventsWithWorkerPool(myWorkHandler1,myWorkHandler2);
+//        //以WorkProcessor的方式消费数据 多个消费进行并行消费同一份数据
+//        MyWorkHandler1 myWorkHandler1 = new MyWorkHandler1();
+//        MyWorkHandler2 myWorkHandler2 = new MyWorkHandler2();
+//        elementDisruptor.handleEventsWithWorkerPool(myWorkHandler1,myWorkHandler2);
 
 
         //启动Disruptor线程，同时启动消费者线程
         elementDisruptor.start();
-        //
 
         //final RingBuffer<Element> ringBuffer = elementDisruptor.getRingBuffer();
 
         Thread thread1 = new Thread() {
+            NewPublisher newPublisher = new NewPublisher(elementDisruptor, new MyPublisher());
             @Override
             public void run() {
-                MyPublisher myPublisher1 = new MyPublisher();
                 String string = "";
                 for (int i = 0; i < 50; i++) {
-                    elementDisruptor.publishEvent(myPublisher1, string);
+                    newPublisher.publish(string);
                     string += "a";
                     try {
                         Thread.sleep(100);
@@ -51,11 +50,11 @@ public class TestDisruptor {
         thread1.start();
 
         Thread thread = new Thread() {
+            NewPublisher newPublisher = new NewPublisher(elementDisruptor, new MyPublisher());
             @Override
             public void run() {
-                MyPublisher myPublisher2 = new MyPublisher();
                 for (int j = 0; j < 50; j++) {
-                    elementDisruptor.publishEvent(myPublisher2, j);
+                    newPublisher.publish(j);
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) {
